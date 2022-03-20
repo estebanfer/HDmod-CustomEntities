@@ -1,7 +1,8 @@
 local celib = require "custom_entities"
 
---Spot distance for the trap is 6 tiles, and based on distance (circle), doesn't detect if 6 tiles below but on ground, doing a little jump makes it detect you
---2.5 secs cooldown for shooting
+--TODO: better solution when player is over the turrent and gets a limit of the angle
+--Spot distance for the trap is 6 tiles (?) and based on distance (circle), doesn't detect if 6 tiles below but on ground, doing a little jump makes it detect you
+--2.5 secs cooldown for shooting?
 
 local function get_diffs(uid1, uid2)
     local x, y = get_position(uid1)
@@ -34,22 +35,13 @@ local function shoot_straight_laser(ent)
 end
 
 local function move_to_angle(ent, to_angle, vel)
-    to_angle = to_angle < 0 and math.pi + to_angle or to_angle
     messpect("angle2", to_angle)
-    local greater, to_sum
-    if to_angle - ent.angle > 0 then
-        greater = true
-        to_sum = vel
+    local diff = to_angle - ent.angle
+    if math.abs(diff) < vel then
+        ent.angle = to_angle
     else
-        greater = false
-        to_sum = -vel
+        ent.angle = diff > 0 and ent.angle + vel or ent.angle - vel 
     end
-    ent.angle = ent.angle + to_sum
-    --if ent.angle + to_sum > to_angle == greater then
-    --    ent.angle = to_angle
-    --else
-    --    ent.angle = ent.angle + to_sum
-    --end
 end
 
 local MAX_DIST = 6
@@ -65,57 +57,63 @@ local function point_to_target(ent, c_data)
         end
         to_angle = math.atan(ydiff / xdiff)
     end
+    to_angle = to_angle < 0 and math.pi + to_angle or to_angle
     return to_angle, xdiff, ydiff
+end
+
+local function point_up(turrent)
+    local to_angle
+    turrent.idle_counter = 0
+    to_angle = test_flag(turrent.flags, ENT_FLAG.FACING_LEFT) and 1.5708 or -1.5708
+    turrent.angle = to_angle
+    return to_angle
 end
 
 local function update_func(ent, c_data)
     local to_angle = 0
-    messpect("asd", ent.overlay)
     if ent.overlay then
         if ent.overlay.type.search_flags == MASK.FLOOR then --update, attached to ceiling
             messpect(c_data.target_uid)
             if c_data.target_uid == -1 then
                 local x, y, layer = get_position(ent.uid)
-                local targets = get_entities_overlapping_hitbox(0, MASK.PLAYER, AABB:new(x, y, x, y):extrude(5), layer)
-                local target_not_spotted = true
-                for _, v in ipairs(targets) do
-                    if distance(ent.uid, v) < MAX_DIST then
+                local targets = get_entities_at(0, MASK.PLAYER, x, y, layer, MAX_DIST)
+                if targets[1] then
                         c_data.target_uid = targets[1]
                         to_angle = point_to_target(ent, c_data)
-                        target_not_spotted = false
-                        break
-                    end
-                end
-                if target_not_spotted then
+                else
                     ent.idle_counter = 0
-                    to_angle = -1.5708
+                    to_angle = 1.5708
                 end
             else
                 local xdiff, ydiff
                 to_angle, xdiff, ydiff = point_to_target(ent, c_data)
                 if ent.idle_counter > 120 then
-                    shoot_laser(ent, xdiff, ydiff)
-                    ent.idle_counter = 0
+                    messpect(math.abs(to_angle - ent.angle) < 0.1, ydiff < -0.01)
+                    if math.abs(to_angle - ent.angle) < 0.1 and ydiff < -0.01 then
+                        shoot_laser(ent, xdiff, ydiff)
+                        ent.idle_counter = 0
+                    end
                 else
                     ent.idle_counter = ent.idle_counter + 1
                 end
             end
         else --update, unattached
             --TODO: Check if MASK.MONSTER is necessary and other masks
-            if ent.overlay and ent.overlay.type.search_flags & (MASK.PLAYER | MASK.MONSTER | MASK.MOUNT) ~= 0 then
+            if ent.overlay.type.search_flags & (MASK.PLAYER | MASK.MONSTER | MASK.MOUNT) ~= 0 then
                 if ent.idle_counter > 180 then
                     shoot_straight_laser(ent)
                     ent.idle_counter = 0
                 else
                     ent.idle_counter = ent.idle_counter + 1
                 end
-                to_angle = 0
+                to_angle = math.pi
+                ent.angle = to_angle
             else
-                ent.idle_counter = 0
+                to_angle = point_up(ent)
             end
         end
     else
-        ent.idle_counter = 0
+        to_angle = point_up(ent)
     end
     messpect(to_angle)
     move_to_angle(ent, to_angle, 0.05)
