@@ -4,18 +4,46 @@ local celib = require "custom_entities"
 --Spot distance for the trap is 6 tiles (?) and based on distance (circle), doesn't detect if 6 tiles below but on ground, doing a little jump makes it detect you
 --2.5 secs cooldown for shooting?
 
+local turrent_texture_id
+do
+    local turrent_texture_def = TextureDefinition.new()
+    turrent_texture_def.width = 128
+    turrent_texture_def.height = 128
+    turrent_texture_def.tile_width = 128
+    turrent_texture_def.tile_height = 128
+
+    turrent_texture_def.texture_path = "turrent.png"
+    turrent_texture_id = define_texture(turrent_texture_def)
+end
+
 local function get_diffs(uid1, uid2)
     local x, y = get_position(uid1)
     local tx, ty = get_position(uid2)
     return tx - x, ty - y
 end
 
----@param ent Container
+---@param ent Movable
 local function set_func(ent)
-    --ent.hitboxx = 0.4
-    --ent.hitboxy = 0.4
-    ent.health = 2
-    ent.inside = ENT_TYPE.FX_EXPLOSION
+    ent.hitboxx = 0.4
+    ent.hitboxy = 0.4
+    ent.offsety = 0
+    ent:set_texture(turrent_texture_id)
+    --Weird bug on transitions
+    if ent.health then
+        ent.health = 2
+    else
+        set_timeout(function()
+            get_entity(ent.uid).health = 1
+        end, 1)
+    end
+    if ent.overlay and ent.overlay.type.search_flags == MASK.FLOOR then
+        ent.flags = set_flag(ent.flags, ENT_FLAG.FACING_LEFT)
+    end
+    ent.flags = clr_flag(ent.flags, ENT_FLAG.TAKE_NO_DAMAGE)
+    set_on_kill(ent.uid, function (e)
+        local x, y, l = get_position(e.uid)
+        spawn(ENT_TYPE.FX_EXPLOSION, x, y, l, 0, 0)
+    end)
     return {
         target_uid = -1
     }
@@ -31,7 +59,7 @@ end
 local function shoot_straight_laser(ent)
     local x, y, l = get_position(ent.uid)
     local dir_x = test_flag(ent.flags, ENT_FLAG.FACING_LEFT) and -1 or 1
-    spawn(ENT_TYPE.ITEM_LASERTRAP_SHOT, x+dir_x*0.3, y, l, dir_x*0.4, 0)
+    get_entity(spawn(ENT_TYPE.ITEM_LASERTRAP_SHOT, x+dir_x*0.74, y, l, dir_x*0.4, 0)).last_owner_uid = ent.uid
 end
 
 local function move_to_angle(ent, to_angle, vel)
@@ -53,9 +81,10 @@ local function point_to_target(ent, c_data)
         to_angle = -1.5708
     else
         if ydiff > 0 then
-            ydiff = -0.01
+            to_angle = xdiff < 0 and 0.34906585 or -0.34906585 --20 deg, TODO: check angle in HD
+        else
+            to_angle = math.atan(ydiff / xdiff)
         end
-        to_angle = math.atan(ydiff / xdiff)
     end
     to_angle = to_angle < 0 and math.pi + to_angle or to_angle
     return to_angle, xdiff, ydiff
@@ -64,7 +93,7 @@ end
 local function point_up(turrent)
     local to_angle
     turrent.idle_counter = 0
-    to_angle = test_flag(turrent.flags, ENT_FLAG.FACING_LEFT) and 1.5708 or -1.5708
+    to_angle = test_flag(turrent.flags, ENT_FLAG.FACING_LEFT) and -1.5708 or 1.5708
     turrent.angle = to_angle
     return to_angle
 end
@@ -97,6 +126,7 @@ local function update_func(ent, c_data)
                     ent.idle_counter = ent.idle_counter + 1
                 end
             end
+            move_to_angle(ent, to_angle, 0.05)
         else --update, unattached
             --TODO: Check if MASK.MONSTER is necessary and other masks
             if ent.overlay.type.search_flags & (MASK.PLAYER | MASK.MONSTER | MASK.MOUNT) ~= 0 then
@@ -106,31 +136,54 @@ local function update_func(ent, c_data)
                 else
                     ent.idle_counter = ent.idle_counter + 1
                 end
-                to_angle = math.pi
-                ent.angle = to_angle
+                ent.angle = 0
             else
-                to_angle = point_up(ent)
+                ent.angle = point_up(ent)
             end
         end
     else
-        to_angle = point_up(ent)
+        ent.angle = point_up(ent)
     end
     messpect(to_angle)
-    move_to_angle(ent, to_angle, 0.05)
 end
 
-local turrent_id = celib.new_custom_entity(set_func, update_func, celib.CARRY_TYPE.HELD, ENT_TYPE.ITEM_CRATE)
+local turrent_id = celib.new_custom_entity(set_func, update_func, celib.CARRY_TYPE.HELD, ENT_TYPE.ITEM_ROCK)
 celib.init()
 
 register_option_button("spawn_trap", "spawn turrent", "spawn turrent", function ()
     local x, y, l = get_position(players[1].uid)
     x, y = math.floor(x), math.floor(y)
-    local over = get_grid_entity_at(x, y+1, l)
-    local uid
-    if over ~= -1 then
-        uid = spawn_over(ENT_TYPE.ITEM_CRATE, over, 0, -1)
-    else
-        uid = spawn(ENT_TYPE.ITEM_CRATE, x, y, l, 0, 0)
-    end
+    local over
+    repeat
+        over = get_grid_entity_at(x, y+1, l)
+        y = y + 1
+    until over ~= -1
+    local uid = spawn_over(ENT_TYPE.ITEM_ROCK, over, 0, -1)
     celib.set_custom_entity(uid, turrent_id)
 end)
+
+local function spawn_turrent(x, y, l)
+    local over, uid = get_grid_entity_at(x, y+1, l)
+    if over ~= -1 then
+        uid = spawn_over(ENT_TYPE.ITEM_ROCK, over, 0, -1)
+    else
+        uid = spawn(ENT_TYPE.ITEM_ROCK, x, y, l, 0, 0)
+    end
+    celib.set_custom_entity(uid, turrent_id)
+end
+
+local function is_solid_grid_entity(x, y, l)
+    return test_flag(get_entity_flags(get_grid_entity_at(x, y, l)), ENT_FLAG.SOLID)
+end
+local function is_valid_turrent_spawn(x, y, l)
+    if get_grid_entity_at(x, y, l) == -1 and is_solid_grid_entity(x, y+1, l) then
+        return true
+    end
+    return false
+end
+local turrent_chance = define_procedural_spawn("turrent", spawn_turrent, is_valid_turrent_spawn)
+
+---@param room_gen_ctx PostRoomGenerationContext
+set_callback(function(room_gen_ctx)
+    room_gen_ctx:set_procedural_spawn_chance(turrent_chance, 10)
+end, ON.POST_ROOM_GENERATION)
