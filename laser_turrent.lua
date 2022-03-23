@@ -1,6 +1,5 @@
 local celib = require "custom_entities"
 
---TODO: better solution when player is over the turrent and gets a limit of the angle
 --Spot distance for the trap is 6 tiles (?) and based on distance (circle), doesn't detect if 6 tiles below but on ground, doing a little jump makes it detect you
 --2.5 secs cooldown for shooting?
 
@@ -28,7 +27,7 @@ local function set_func(ent)
     ent.hitboxy = 0.4
     ent.offsety = 0
     ent:set_texture(turrent_texture_id)
-    --Weird bug on transitions
+    --Fixes a weird bug on transitions
     if ent.health then
         ent.health = 2
     else
@@ -128,7 +127,6 @@ local function update_func(ent, c_data)
             end
             move_to_angle(ent, to_angle, 0.05)
         else --update, unattached
-            --TODO: Check if MASK.MONSTER is necessary and other masks
             if ent.overlay.type.search_flags & (MASK.PLAYER | MASK.MONSTER | MASK.MOUNT) ~= 0 then
                 if ent.idle_counter > 180 then
                     shoot_straight_laser(ent)
