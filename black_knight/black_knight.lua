@@ -1,5 +1,5 @@
 local celib = require "custom_entities"
-
+--obviously the custom shield will become a regular one when you leave the level
 local black_knight_texture_id
 do
     black_knight_texture_def = get_texture_definition(TEXTURE.DATA_TEXTURES_MONSTERS01_0)
