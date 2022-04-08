@@ -1,16 +1,31 @@
 local celib = require "custom_entities"
---TODO: Lighting intensity and color, sapphire drop chances are wrong (probably)
+local BRIGHTNESS = 1.0
+--TODO: sapphire drop chances are wrong (probably)
+
+local lightbulb_texture_id
+do
+    local lightbulb_texture_def = TextureDefinition.new()
+    lightbulb_texture_def.width = 128
+    lightbulb_texture_def.height = 128
+    lightbulb_texture_def.tile_width = 128
+    lightbulb_texture_def.tile_height = 128
+
+    lightbulb_texture_def.texture_path = "lightbulb.png"
+    lightbulb_texture_id = define_texture(lightbulb_texture_def)
+end
 
 local function light_update(light_emitter)
     refresh_illumination(light_emitter)
-    light_emitter.brightness = 3.0
+    light_emitter.brightness = BRIGHTNESS
 end
 
 local function mothership_light_set(ent)
     ent.hitboxx = 0.35
     ent.hitboxy = 0.4
-    local light_emitter = create_illumination(Color:blue(), 2, ent.uid)
-    light_emitter.brightness = 3.0
+    ent:set_texture(lightbulb_texture_id)
+    local light_emitter = create_illumination(Color:new(0.2, 0.3, 1, 1), 3, ent.uid)
+    light_emitter.brightness = BRIGHTNESS
+    light_emitter.brightness_multiplier = 3.0
     return {
         light_emitter = light_emitter
     }
