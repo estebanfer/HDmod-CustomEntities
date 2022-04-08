@@ -1,5 +1,5 @@
 local celib = require "custom_entities"
-local nosacrifice = require "nosacrifice_items"
+local nosacrifice = require "../nosacrifice_items"
 
 --Turrent can be freezed on HD, idk how to make that work there
 --Spot distance for the trap is 6 tiles (?) and based on distance (circle), doesn't detect if 6 tiles below but on ground, doing a little jump makes it detect you

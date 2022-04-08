@@ -1,5 +1,6 @@
 local celib = require "custom-entities"
 
+--giant frogs spit only 5 frogs and then only jump (?)
 local function giant_frog_set()
 
     return {
