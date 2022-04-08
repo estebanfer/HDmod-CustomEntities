@@ -1,9 +1,17 @@
+local nosacrifice = require "nosacrifice_items"
 --TODO: check piranha spotting players max distance on HD
 
 local function b(flag) return (1 << (flag-1)) end
 
-local function piranha_set(uid)
-    set_entity_flags2(uid, set_flag(get_entity_flags2(uid), ENT_MORE_FLAG.DISABLE_INPUT))
+local function set_piranha_skeleton(uid)
+    --TODO: Hitbox?
+    --set_entity_flags(uid, set_flag(get_entity_flags(uid), ENT_FLAG.TAKE_NO_DAMAGE))
+    local ent = get_entity(uid)
+    ent.hitboxx = 0.35
+    ent.hitboxy = 0.25
+    nosacrifice.add_uid(uid)
+    --offsety?
+    --get_entity(uid):set_texture(piranha_corpse_texture)
 end
 
 local function piranha_move(ent)
@@ -48,6 +56,7 @@ end
 ---@param ent Tadpole
 local function piranha_update(ent)
     --ent.animation_frame = get_frame() % 8 --check how many frames piranha has
+    ent.lock_input_timer = 512
     ---@type Player
     local chased = get_entity(ent.chased_target_uid)
     if chased then
@@ -68,11 +77,15 @@ local function piranha_update(ent)
             piranha_move(ent)
         end
     end
+    if ent.wet_effect_timer < 300 and ent.standing_on_uid ~= -1 then
+        local x, y, l = get_position(ent.uid)
+        set_piranha_skeleton(spawn(ENT_TYPE.ITEM_ROCK, x, y, l, 0, 0))
+        ent:destroy()
+    end
 end
 
 register_option_button("spawn_piranha", "spawn_piranha", "spawn_piranha", function ()
     local x, y, l = get_position(players[1].uid)
     local uid = spawn(ENT_TYPE.MONS_TADPOLE, x, y, l, 0, 0)
-    piranha_set(uid)
     set_post_statemachine(uid, piranha_update)
 end)
