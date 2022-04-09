@@ -1,7 +1,8 @@
 local celib = require "custom_entities"
+local nosacrifice = require "../nosacrifice_items"
 
+--Turrent can be freezed on HD, idk how to make that work there
 --Spot distance for the trap is 6 tiles (?) and based on distance (circle), doesn't detect if 6 tiles below but on ground, doing a little jump makes it detect you
---2.5 secs cooldown for shooting?
 
 local turrent_texture_id
 do
@@ -21,28 +22,50 @@ local function get_diffs(uid1, uid2)
     return tx - x, ty - y
 end
 
+---@param laser LightShot
+local function laser_set(laser)
+    ---@param _laser LightShot
+    ---@param collider Movable
+    set_pre_collision2(laser.uid, function (_laser, collider)
+        if collider.type.search_flags & (MASK.PLAYER | MASK.MOUNT | MASK.MONSTER) ~= 0 then
+            if collider.invincibility_frames_timer == 0 then
+                collider:damage(_laser.uid, 1, 60, _laser.velocityx*0.75, 0.1, 30)
+            end
+            _laser:destroy()
+            return true
+        end
+    end)
+    --Plan B (Blue)
+    --laser.emitted_light.brightness = 2.0
+    --local light = laser.emitted_light.light1
+    --light.red, light.green, light.blue = 0.2, 0.5, 1.0
+end
+
+local function spawn_turrent_rubble(x, y, l, amount)
+    for _=1, amount do
+        local rub = get_entity(spawn(ENT_TYPE.ITEM_RUBBLE, x, y, l, prng:random_float(PRNG_CLASS.PARTICLES)*0.5-0.25, prng:random_float(PRNG_CLASS.PARTICLES)*0.25))
+        rub.animation_frame = 20
+    end
+end
+
 ---@param ent Movable
 local function set_func(ent)
     ent.hitboxx = 0.4
     ent.hitboxy = 0.4
     ent.offsety = 0
     ent:set_texture(turrent_texture_id)
-    --Fixes a weird bug on transitions
-    if ent.health then
-        ent.health = 2
-    else
-        set_timeout(function()
-            get_entity(ent.uid).health = 1
-        end, 1)
-    end
+    ent.health = 2
     if ent.overlay and ent.overlay.type.search_flags == MASK.FLOOR then
         ent.flags = set_flag(ent.flags, ENT_FLAG.FACING_LEFT)
     end
     ent.flags = clr_flag(ent.flags, ENT_FLAG.TAKE_NO_DAMAGE)
+    ent.flags = clr_flag(ent.flags, 22)
     set_on_kill(ent.uid, function (e)
         local x, y, l = get_position(e.uid)
-        spawn(ENT_TYPE.FX_EXPLOSION, x, y, l, 0, 0)
+        get_entity(spawn(ENT_TYPE.FX_EXPLOSION, x, y, l, 0, 0)).last_owner_uid = e.last_owner_uid
+        spawn_turrent_rubble(x, y, l, 5)
     end)
+    nosacrifice.add_uid(ent.uid)
     return {
         target_uid = -1
     }
@@ -52,17 +75,21 @@ local function shoot_laser(ent, xdiff, ydiff)
     local x, y, l = get_position(ent.uid)
     local dist = math.sqrt(xdiff*xdiff + ydiff*ydiff) * 3
     local vx, vy = xdiff / dist, ydiff / dist
-    get_entity(spawn(ENT_TYPE.ITEM_LASERTRAP_SHOT, x+vx*2, y+vy*2, l, vx, vy)).angle = ent.angle
+    local laser = get_entity(spawn(ENT_TYPE.ITEM_LASERTRAP_SHOT, x+vx*2, y+vy*2, l, vx, vy))
+    laser_set(laser)
+    laser.angle = ent.angle
 end
 
 local function shoot_straight_laser(ent)
     local x, y, l = get_position(ent.uid)
     local dir_x = test_flag(ent.flags, ENT_FLAG.FACING_LEFT) and -1 or 1
-    get_entity(spawn(ENT_TYPE.ITEM_LASERTRAP_SHOT, x+dir_x*0.74, y, l, dir_x*0.4, 0)).last_owner_uid = ent.uid
+    local laser = get_entity(spawn(ENT_TYPE.ITEM_LASERTRAP_SHOT, x+dir_x*0.74, y, l, dir_x*0.4, 0))
+    laser.last_owner_uid = ent.uid
+    laser_set(laser)
+    laser.angle = ent.angle
 end
 
 local function move_to_angle(ent, to_angle, vel)
-    messpect("angle2", to_angle)
     local diff = to_angle - ent.angle
     if math.abs(diff) < vel then
         ent.angle = to_angle
@@ -101,7 +128,6 @@ local function update_func(ent, c_data)
     local to_angle = 0
     if ent.overlay then
         if ent.overlay.type.search_flags == MASK.FLOOR then --update, attached to ceiling
-            messpect(c_data.target_uid)
             if c_data.target_uid == -1 then
                 local x, y, layer = get_position(ent.uid)
                 local targets = get_entities_at(0, MASK.PLAYER, x, y, layer, MAX_DIST)
@@ -115,8 +141,7 @@ local function update_func(ent, c_data)
             else
                 local xdiff, ydiff
                 to_angle, xdiff, ydiff = point_to_target(ent, c_data)
-                if ent.idle_counter > 120 then
-                    messpect(math.abs(to_angle - ent.angle) < 0.1, ydiff < -0.01)
+                if ent.idle_counter > 240 then
                     if math.abs(to_angle - ent.angle) < 0.1 and ydiff < -0.01 then
                         shoot_laser(ent, xdiff, ydiff)
                         ent.idle_counter = 0
@@ -125,10 +150,10 @@ local function update_func(ent, c_data)
                     ent.idle_counter = ent.idle_counter + 1
                 end
             end
-            move_to_angle(ent, to_angle, 0.05)
+            move_to_angle(ent, to_angle, 0.085)
         else --update, unattached
             if ent.overlay.type.search_flags & (MASK.PLAYER | MASK.MONSTER | MASK.MOUNT) ~= 0 then
-                if ent.idle_counter > 180 then
+                if ent.idle_counter > 240 then
                     shoot_straight_laser(ent)
                     ent.idle_counter = 0
                 else
@@ -142,7 +167,6 @@ local function update_func(ent, c_data)
     else
         ent.angle = point_up(ent)
     end
-    messpect(to_angle)
 end
 
 local turrent_id = celib.new_custom_entity(set_func, update_func, celib.CARRY_TYPE.HELD, ENT_TYPE.ITEM_ROCK)
